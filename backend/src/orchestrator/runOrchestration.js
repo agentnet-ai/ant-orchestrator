@@ -19,6 +19,51 @@ async function runOrchestration(query, options = {}) {
   const resolverResult = await queryResolver(query, { conversationId: opts.conversationId });
   const resolverMs = resolverTimer();
 
+  // --- Node-not-found early exit ---
+  const nodeNotFound =
+    resolverResult.coverage === 0 &&
+    resolverResult.snippets.length === 0 &&
+    (resolverResult.notes || "").includes("node not found");
+
+  if (nodeNotFound) {
+    const ownerSlug = process.env.RESOLVER_OWNER_SLUG || "agentnet";
+    const result = {
+      response: `No node found for identifier "${query}" under owner "${ownerSlug}". Use a known AgentNet identifier.`,
+      trace: {
+        traceVersion: "0.1",
+        requestId: id,
+        routing: {
+          resolverUsed: true,
+          webRagUsed: false,
+          reason: "Resolver returned node not found",
+          steps: [
+            { name: "resolver", executed: true, reason: "Ground-First: always executes" },
+            { name: "webRag", executed: false, reason: "Resolver returned node not found" },
+            { name: "llm", executed: false, reason: "Resolver returned node not found" },
+          ],
+        },
+        resolver: {
+          coverage: resolverResult.coverage,
+          confidence: resolverResult.confidence,
+          snippetCount: 0,
+          mode: resolverResult.mode || "mock",
+        },
+        thresholds: {
+          ...THRESHOLDS.resolver,
+          passed: false,
+          webRagTriggered: false,
+          notes: resolverResult.notes || "resolver: node not found",
+        },
+        promptBlocks: [],
+        provenance: { sources: [] },
+        timing: { totalMs: total(), resolverMs, webRagMs: 0, llmMs: 0 },
+      },
+    };
+
+    await persistChatRun({ query, result, conversationId: opts.conversationId });
+    return result;
+  }
+
   // --- Threshold evaluation ---
   const threshold = evaluateThresholds(resolverResult);
 
