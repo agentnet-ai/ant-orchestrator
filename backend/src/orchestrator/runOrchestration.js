@@ -114,7 +114,7 @@ async function runOrchestration(query, options = {}) {
     },
   };
 
-  await persistChatRun({ query, result });
+  await persistChatRun({ query, result, conversationId: opts.conversationId });
 
   return result;
 }

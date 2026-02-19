@@ -18,3 +18,19 @@ export async function sendMessage({ conversationId, text, options }) {
 
   return res.json();
 }
+
+export async function replayConversation(conversationId, limit = 200) {
+  const res = await fetch(
+    `${API_BASE}/api/conversations/${encodeURIComponent(conversationId)}/messages?limit=${limit}`
+  );
+
+  if (res.status === 404) return { status: "not_found", messages: [] };
+  if (res.status === 503) return { status: "db_unavailable", messages: [] };
+
+  if (!res.ok) {
+    return { status: "error", messages: [] };
+  }
+
+  const data = await res.json();
+  return { status: "ok", messages: data.messages || [] };
+}

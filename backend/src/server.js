@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const healthRouter = require("./routes/health");
 const chatRouter = require("./routes/chat");
+const conversationsRouter = require("./routes/conversations");
 
 function createServer() {
   const app = express();
@@ -10,6 +11,7 @@ function createServer() {
 
   app.use("/api/health", healthRouter);
   app.use("/api/chat", chatRouter);
+  app.use("/api/conversations", conversationsRouter);
 
   return app;
 }
