@@ -8,7 +8,7 @@ let _warningLogged = false;
  * Optionally persist chat run to MySQL.
  * Fail-open: never blocks or rejects the response.
  */
-async function persistChatRun({ query, result, conversationId }) {
+async function persistChatRun({ query, result, conversationId, identitySnapshot }) {
   if (!ENABLED) return;
   if (!isDbReachable()) return;
 
@@ -37,6 +37,7 @@ async function persistChatRun({ query, result, conversationId }) {
       role: "assistant",
       content: result.response,
       trace: result.trace,
+      identity_snapshot: identitySnapshot || null,
     });
   } catch (err) {
     if (!_warningLogged) {

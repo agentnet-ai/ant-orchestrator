@@ -27,6 +27,10 @@ const Message = sequelize.define("Message", {
     type: DataTypes.JSON,
     allowNull: true,
   },
+  identity_snapshot: {
+    type: DataTypes.JSON,
+    allowNull: true,
+  },
 }, {
   indexes: [{ fields: ["conversationId"] }],
 });

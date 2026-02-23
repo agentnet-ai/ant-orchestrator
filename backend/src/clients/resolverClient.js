@@ -2,9 +2,19 @@ const RESOLVER_MODE = process.env.RESOLVER_MODE || "mock";
 const RESOLVER_BASE_URL = process.env.RESOLVER_BASE_URL || "http://localhost:5175";
 const RESOLVER_NODE_ENDPOINT = process.env.RESOLVER_NODE_ENDPOINT || "/v1/resolve/node";
 const RESOLVER_ENDPOINT = process.env.RESOLVER_ENDPOINT || "/v1/resolve/capsules";
+const RESOLVER_QUERY_ENDPOINT = process.env.RESOLVER_QUERY_ENDPOINT || "/v1/resolve/query";
 const RESOLVER_TIMEOUT_MS = Number(process.env.RESOLVER_TIMEOUT_MS) || 5000;
 const RESOLVER_API_KEY = process.env.RESOLVER_API_KEY || "";
 const RESOLVER_OWNER_SLUG = process.env.RESOLVER_OWNER_SLUG || "";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const URI_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+$/i;
+
+function isStructuredIdentifier(q) {
+  const t = q.trim();
+  return UUID_RE.test(t) || URI_RE.test(t) || DOMAIN_RE.test(t);
+}
 
 // ── public API ──────────────────────────────────────────────
 
@@ -15,15 +25,23 @@ async function queryResolver(query, context = {}) {
   return queryResolverMock(query);
 }
 
-// ── HTTP mode (two-step: node resolve → capsule fetch) ──────
+// ── HTTP mode ───────────────────────────────────────────────
 
 async function queryResolverHttp(query, context) {
   const ownerSlug = RESOLVER_OWNER_SLUG || context.conversationId || "";
 
-  // Step 1: resolve node by identifier
+  if (isStructuredIdentifier(query)) {
+    return resolveByIdentifier(query, ownerSlug);
+  }
+  return resolveByQuery(query, ownerSlug);
+}
+
+// ── Structured path: node resolve → capsule fetch ───────────
+
+async function resolveByIdentifier(query, ownerSlug) {
   const nodeResult = await postResolver(
     `${RESOLVER_BASE_URL}${RESOLVER_NODE_ENDPOINT}`,
-    { owner_slug: ownerSlug, identifier: query }
+    { owner_slug: ownerSlug, identifier: query },
   );
 
   if (nodeResult.error) {
@@ -47,6 +65,8 @@ async function queryResolverHttp(query, context) {
       snippetText: "",
       notes: "resolver: node not found",
       mode: "http",
+      routedVia: "identifier",
+      identitySnapshot: null,
       raw,
     };
   }
@@ -58,10 +78,9 @@ async function queryResolverHttp(query, context) {
     return failResult("node resolve: nodeId missing from response");
   }
 
-  // Step 2: fetch capsules for the resolved node
   const capResult = await postResolver(
     `${RESOLVER_BASE_URL}${RESOLVER_ENDPOINT}`,
-    { nodeId }
+    { nodeId },
   );
 
   if (capResult.error) {
@@ -75,7 +94,60 @@ async function queryResolverHttp(query, context) {
     return failResult(`capsules ok:false (${msg})`);
   }
 
-  return normalizeCapsuleResponse(capRaw, node);
+  const result = normalizeCapsuleResponse(capRaw, node);
+  result.routedVia = "identifier";
+  return result;
+}
+
+// ── Natural language path: resolve/query ────────────────────
+
+async function resolveByQuery(query, ownerSlug) {
+  const qResult = await postResolver(
+    `${RESOLVER_BASE_URL}${RESOLVER_QUERY_ENDPOINT}`,
+    { owner_slug: ownerSlug, q: query, limit: 20 },
+  );
+
+  if (qResult.error) {
+    return failResult(`query resolve: ${qResult.error}`);
+  }
+
+  const raw = qResult.data;
+
+  if (raw.ok === false) {
+    const msg = raw.error?.message || raw.error?.code || "unknown error";
+    return failResult(`query resolve ok:false (${msg})`);
+  }
+
+  return normalizeQueryResponse(raw);
+}
+
+function normalizeQueryResponse(raw) {
+  const results = raw.results ?? [];
+  const coverage = raw.coverage ?? 0;
+  const confidence = raw.confidence ?? 0;
+
+  const snippets = results.map((r, i) => ({
+    id: r.capsuleId || `qr-${i}`,
+    text: r.snippet || r.name || "",
+    source: r.capsuleUri || r.nodeUri || "resolver",
+    score: r.relevance ?? coverage,
+  }));
+
+  const snippetText = snippets.map((s) => s.text).join("\n").slice(0, 2000);
+
+  return {
+    coverage: round(coverage),
+    confidence: round(confidence),
+    snippets,
+    capsules: results,
+    facts: [],
+    snippetText,
+    notes: results.length === 0 ? "resolver: no query results" : "",
+    mode: "http",
+    routedVia: "query",
+    identitySnapshot: null,
+    raw,
+  };
 }
 
 /**
@@ -159,6 +231,7 @@ function normalizeCapsuleResponse(capRaw, node) {
     snippetText,
     notes: "",
     mode: "http",
+    identitySnapshot: extractIdentity(capRaw.audit?.identity),
     raw: { node, capsules: capRaw },
   };
 }
@@ -173,7 +246,21 @@ function failResult(reason) {
     snippetText: "",
     notes: `resolver error: ${reason}`,
     mode: "http",
+    identitySnapshot: null,
     raw: null,
+  };
+}
+
+function extractIdentity(identity) {
+  if (!identity || typeof identity !== "object") return null;
+  return {
+    registrarOwnerSlug: identity.registrarOwnerSlug ?? identity.registrar_owner_slug ?? null,
+    ownerId: identity.ownerId ?? identity.owner_id ?? null,
+    lifecycleState: identity.lifecycleState ?? identity.lifecycle_state ?? null,
+    verifiedAt: identity.verifiedAt ?? identity.verified_at ?? null,
+    source: identity.source ?? null,
+    ttlMs: identity.ttlMs ?? identity.ttl_ms ?? null,
+    usedCache: identity.usedCache ?? identity.used_cache ?? null,
   };
 }
 
@@ -210,6 +297,7 @@ async function queryResolverMock(query) {
     snippetText: "",
     notes: forceFailIgnored ? "forcefail override ignored (production mode)" : "",
     mode: "mock",
+    identitySnapshot: null,
     raw: null,
   };
 }

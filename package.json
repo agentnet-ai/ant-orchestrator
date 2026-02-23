@@ -4,6 +4,7 @@
   "workspaces": ["backend", "frontend"],
   "scripts": {
     "dev": "concurrently -k -n ORCH-BE,ORCH-FE,RESOLVER -c blue,green,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\" \"cd ../ant-resolver && npm run dev\"",
+    "reset:dev": "node scripts/reset-dev.js",
     "kill": "node scripts/killPorts.js",
     "demo": "npm run kill && concurrently -k -n ORCH-BE,ORCH-FE,RESOLVER,OPEN -c blue,green,magenta,cyan \"npm run dev -w backend\" \"npm run dev -w frontend\" \"cd ../ant-resolver && npm run dev\" \"node scripts/openWhenReady.js\""
   },

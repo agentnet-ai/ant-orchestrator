@@ -32,7 +32,7 @@ router.get("/:conversationId/messages", async (req, res) => {
       where: { conversationId },
       order: [["createdAt", "ASC"]],
       limit,
-      attributes: ["messageId", "role", "content", "createdAt", "trace"],
+      attributes: ["messageId", "role", "content", "createdAt", "trace", "identity_snapshot"],
     });
 
     return res.json({ conversationId, messages: rows });

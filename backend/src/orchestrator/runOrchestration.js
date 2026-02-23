@@ -19,27 +19,33 @@ async function runOrchestration(query, options = {}) {
   const resolverResult = await queryResolver(query, { conversationId: opts.conversationId });
   const resolverMs = resolverTimer();
 
-  // --- Node-not-found early exit ---
-  const nodeNotFound =
+  // --- No-results early exit ---
+  const noResults =
     resolverResult.coverage === 0 &&
     resolverResult.snippets.length === 0 &&
-    (resolverResult.notes || "").includes("node not found");
+    ((resolverResult.notes || "").includes("node not found") ||
+     (resolverResult.notes || "").includes("no query results"));
 
-  if (nodeNotFound) {
+  if (noResults) {
     const ownerSlug = process.env.RESOLVER_OWNER_SLUG || "agentnet";
+    const routedVia = resolverResult.routedVia || "identifier";
+    const reasonText = routedVia === "query"
+      ? `No matching capsules found for "${query}" under owner "${ownerSlug}".`
+      : `No node found for identifier "${query}" under owner "${ownerSlug}". Use a known AgentNet identifier.`;
     const result = {
-      response: `No node found for identifier "${query}" under owner "${ownerSlug}". Use a known AgentNet identifier.`,
+      response: reasonText,
       trace: {
         traceVersion: "0.1",
         requestId: id,
         routing: {
           resolverUsed: true,
           webRagUsed: false,
-          reason: "Resolver returned node not found",
+          routedVia,
+          reason: "Resolver returned no results",
           steps: [
-            { name: "resolver", executed: true, reason: "Ground-First: always executes" },
-            { name: "webRag", executed: false, reason: "Resolver returned node not found" },
-            { name: "llm", executed: false, reason: "Resolver returned node not found" },
+            { name: "resolver", executed: true, reason: `Ground-First (${routedVia})` },
+            { name: "webRag", executed: false, reason: "Resolver returned no results" },
+            { name: "llm", executed: false, reason: "Resolver returned no results" },
           ],
         },
         resolver: {
@@ -47,12 +53,13 @@ async function runOrchestration(query, options = {}) {
           confidence: resolverResult.confidence,
           snippetCount: 0,
           mode: resolverResult.mode || "mock",
+          routedVia,
         },
         thresholds: {
           ...THRESHOLDS.resolver,
           passed: false,
           webRagTriggered: false,
-          notes: resolverResult.notes || "resolver: node not found",
+          notes: resolverResult.notes || "resolver: no results",
         },
         promptBlocks: [],
         provenance: { sources: [] },
@@ -60,7 +67,7 @@ async function runOrchestration(query, options = {}) {
       },
     };
 
-    await persistChatRun({ query, result, conversationId: opts.conversationId });
+    await persistChatRun({ query, result, conversationId: opts.conversationId, identitySnapshot: resolverResult.identitySnapshot });
     return result;
   }
 
@@ -123,6 +130,8 @@ async function runOrchestration(query, options = {}) {
     );
   }
 
+  const routedVia = resolverResult.routedVia || "identifier";
+
   const result = {
     response,
     trace: {
@@ -131,6 +140,7 @@ async function runOrchestration(query, options = {}) {
       routing: {
         resolverUsed: true,
         webRagUsed: webResult !== null,
+        routedVia,
         reason: threshold.notes,
         steps,
       },
@@ -139,6 +149,7 @@ async function runOrchestration(query, options = {}) {
         confidence: resolverResult.confidence,
         snippetCount: resolverResult.snippets.length,
         mode: resolverResult.mode || "mock",
+        routedVia,
       },
       thresholds: {
         ...THRESHOLDS.resolver,
@@ -159,7 +170,7 @@ async function runOrchestration(query, options = {}) {
     },
   };
 
-  await persistChatRun({ query, result, conversationId: opts.conversationId });
+  await persistChatRun({ query, result, conversationId: opts.conversationId, identitySnapshot: resolverResult.identitySnapshot });
 
   return result;
 }
