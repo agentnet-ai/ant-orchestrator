@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This guide gets `ant-orchestrator` running locally and shows how it connects to the rest of the AgentNet reference stack.
+Set up and run `ant-orchestrator` locally as the orchestration layer in the AgentNet reference flow.
 
-## Prerequisites
+## Prereqs
 
 - Node.js and npm
 - MySQL
@@ -17,29 +17,25 @@ cp backend/.env.example backend/.env
 npm install
 ```
 
-## Run
+## Run commands
 
-```bash
-npm run dev
-```
-
-Useful alternatives:
-
+- `npm run dev`
 - `npm run demo`
-- `npm run kill`
 - `npm run reset:dev`
+- `npm run kill`
 
 ## Typical local integration flow
 
 1. Start `ant-registrar`.
 2. Start `ant-resolver`.
-3. Start `ant-capsulizer` if web crawl inputs are needed.
-4. Start `ant-orchestrator` (`npm run dev` or `npm run demo`).
-5. Verify orchestration output in the frontend and backend logs.
+3. Start `ant-capsulizer` when ingestion/web crawl input is needed.
+4. Start `ant-orchestrator` with one of the run commands above.
+5. Verify end-to-end behavior in local logs and UI.
 
-## Links
+## Related Repositories
 
-- AgentNet: https://github.com/agentnet-ai/AgentNet
-- ant-capsulizer: https://github.com/agentnet-ai/ant-capsulizer
-- ant-registrar: https://github.com/agentnet-ai/ant-registrar
-- ant-resolver: https://github.com/agentnet-ai/ant-resolver
+- https://github.com/agentnet-ai/AgentNet
+- https://github.com/agentnet-ai/ant-capsulizer
+- https://github.com/agentnet-ai/ant-registrar
+- https://github.com/agentnet-ai/ant-resolver
+- https://github.com/agentnet-ai/ant-orchestrator

@@ -1,56 +1,59 @@
 # ant-orchestrator
 
-Orchestration runtime for AgentNet that coordinates grounded answer generation across UI, backend, and resolver services.
+Orchestration runtime for AgentNet that coordinates retrieval and response assembly across local services.
+
+Status: Alpha / Reference Implementation
+Docs: https://www.agent-net.ai
+Org: https://github.com/agentnet-ai
 
 ## What it does
 
-`ant-orchestrator` is the composition layer in the AgentNet reference stack. It runs a frontend and backend that manage user queries, call upstream services, and assemble response outputs for local development and demos.
+`ant-orchestrator` is the orchestration component of the AgentNet reference architecture.
 
-The backend orchestrates retrieval and generation paths, while the frontend provides the interaction surface. In local mode, the repo can also start `ant-resolver` so the full query-to-resolution flow is available in one command.
+It is responsible for coordinating retrieval and response assembly behavior across the local service graph, including backend/frontend execution paths.
 
-The implementation is intended as a reference baseline for multi-service orchestration behavior aligned to ANS Core v2.0.
+In a local development environment, it typically runs alongside `ant-resolver`, and often with `ant-registrar` and `ant-capsulizer` for full end-to-end validation.
 
 ## Where it fits
 
-Canonical flow:
+Within the canonical AgentNet flow:
 
 1. Capsulizer
 2. Registrar
 3. Resolver
-4. Orchestrator (this repository)
+4. Orchestrator
+
+This repository provides the orchestration role.
 
 ## Quickstart
 
 ```bash
 npm install
-npm run dev
 ```
 
-Also available:
+Run commands:
 
+- `npm run dev`
 - `npm run demo`
-- `npm run kill`
 - `npm run reset:dev`
+- `npm run kill`
 
 ## Configuration
 
-Environment variables are managed in `backend/.env`. Start from `backend/.env.example`:
+Use `backend/.env.example`:
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-## Repo structure
-
-- `backend/` Express orchestration API
-- `frontend/` Vite + React client
-- `scripts/` local development utilities
-
 ## Status
 
-Alpha, reference implementation.
+Status: Alpha / Reference Implementation  
+These components are intended to demonstrate ANS-aligned architecture patterns.
 
 ## Related Repositories
+
+Other core AgentNet reference components:
 
 - https://github.com/agentnet-ai/AgentNet
 - https://github.com/agentnet-ai/ant-capsulizer
@@ -60,4 +63,4 @@ Alpha, reference implementation.
 
 ## License
 
-Apache License 2.0. See `LICENSE`.
+Apache License 2.0. See `LICENSE` for details.
