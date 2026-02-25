@@ -1,25 +1,17 @@
-/**
- * Mock web-RAG client.
- * In production this performs web retrieval-augmented generation.
- */
+const { crawlWeb } = require("./capsulizerClient");
+
 async function queryWeb(query) {
-  const latencyMs = 80 + Math.random() * 60;
-  await sleep(latencyMs);
-
+  const { sources, errorCode, error } = await crawlWeb({ query, limit: 5 });
   return {
-    results: [
-      {
-        title: `Web result for: "${query}"`,
-        url: "https://example.com/mock",
-        snippet: "This is a mock web-RAG snippet.",
-        source: "web",
-      },
-    ],
+    results: sources.map((s) => ({
+      title: s.title || s.url,
+      url: s.url,
+      snippet: s.snippet || "",
+      source: "web",
+    })),
+    errorCode: errorCode || null,
+    error: error || null,
   };
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 module.exports = { queryWeb };

@@ -7,6 +7,7 @@ import TracePanel from "./components/Trace/TracePanel";
 const LS_CID = "ant_orch_conversationId";
 const LS_WEB = "ant_orch_enableWebRag";
 const LS_LLM = "ant_orch_enableLlm";
+const LS_ANSWER_MODE = "ant_orch_answerMode";
 
 function getOrCreateCid() {
   let cid = localStorage.getItem(LS_CID);
@@ -21,6 +22,14 @@ function loadBool(key) {
   return localStorage.getItem(key) === "true";
 }
 
+function loadAnswerMode() {
+  const stored = localStorage.getItem(LS_ANSWER_MODE);
+  if (stored === "agentnet" || stored === "rag" || stored === "model" || stored === "all") {
+    return stored;
+  }
+  return import.meta.env.PROD ? "agentnet" : "all";
+}
+
 export default function App() {
   const [conversationId] = useState(getOrCreateCid);
   const [messages, setMessages] = useState([]);
@@ -31,12 +40,14 @@ export default function App() {
 
   const [enableWebRag, setEnableWebRag] = useState(() => loadBool(LS_WEB));
   const [enableLlm, setEnableLlm] = useState(() => loadBool(LS_LLM));
+  const [answerMode, setAnswerMode] = useState(loadAnswerMode);
 
   const replayDone = useRef(false);
 
   // Persist toggle state
   useEffect(() => { localStorage.setItem(LS_WEB, enableWebRag); }, [enableWebRag]);
   useEffect(() => { localStorage.setItem(LS_LLM, enableLlm); }, [enableLlm]);
+  useEffect(() => { localStorage.setItem(LS_ANSWER_MODE, answerMode); }, [answerMode]);
 
   // Replay on mount
   useEffect(() => {
@@ -99,6 +110,7 @@ export default function App() {
           conversationId,
           text,
           options: { enableWebRag, enableLlm },
+          answerMode,
         });
 
         const assistantMsg = {
@@ -133,8 +145,13 @@ export default function App() {
         setLoading(false);
       }
     },
-    [conversationId, enableWebRag, enableLlm]
+    [conversationId, enableWebRag, enableLlm, answerMode]
   );
+
+  const handleClearResponse = useCallback(() => {
+    setMessages([]);
+    setSelectedIdx(null);
+  }, []);
 
   const selectedTrace =
     selectedIdx !== null && messages[selectedIdx]?.trace
@@ -155,12 +172,15 @@ export default function App() {
           selectedIdx={selectedIdx}
           onSelect={setSelectedIdx}
           replaying={replaying}
+          onClear={handleClearResponse}
         />
         <ChatInput
           onSend={handleSend}
           disabled={loading}
           enableWebRag={enableWebRag}
           enableLlm={enableLlm}
+          answerMode={answerMode}
+          onAnswerModeChange={setAnswerMode}
           onToggleWebRag={() => setEnableWebRag((v) => !v)}
           onToggleLlm={() => setEnableLlm((v) => !v)}
         />

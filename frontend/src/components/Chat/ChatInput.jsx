@@ -24,6 +24,8 @@ export default function ChatInput({
   disabled,
   enableWebRag,
   enableLlm,
+  answerMode,
+  onAnswerModeChange,
   onToggleWebRag,
   onToggleLlm,
 }) {
@@ -45,6 +47,20 @@ export default function ChatInput({
       <div className="flex items-center gap-2">
         <Toggle label="Web RAG" on={enableWebRag} onToggle={onToggleWebRag} disabled={disabled} />
         <Toggle label="LLM" on={enableLlm} onToggle={onToggleLlm} disabled={disabled} />
+        <label className="ml-auto flex items-center gap-2 text-xs text-neutral-400">
+          <span>Answer mode</span>
+          <select
+            value={answerMode}
+            onChange={(e) => onAnswerModeChange(e.target.value)}
+            disabled={disabled}
+            className="bg-neutral-800 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-100"
+          >
+            <option value="agentnet">AgentNet (Deterministic)</option>
+            <option value="rag">RAG (AgentNet + Web)</option>
+            <option value="model">Model (LLM Synthesis)</option>
+            <option value="all">All</option>
+          </select>
+        </label>
       </div>
       <div className="flex gap-2">
         <input
@@ -53,7 +69,7 @@ export default function ChatInput({
           onChange={(e) => setText(e.target.value)}
           disabled={disabled}
           placeholder="Type a message…"
-          className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="flex-1 bg-neutral-800 border-2 border-[#F26B3A] rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-[#F26B3A]"
         />
         <button
           type="submit"

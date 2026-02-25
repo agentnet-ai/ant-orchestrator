@@ -1,50 +1,63 @@
 # ant-orchestrator
 
-Ground-First orchestration layer for AgentNet. Monorepo with React frontend and Express backend.
+Orchestration runtime for AgentNet that coordinates grounded answer generation across UI, backend, and resolver services.
 
-## Quick start
+## What it does
+
+`ant-orchestrator` is the composition layer in the AgentNet reference stack. It runs a frontend and backend that manage user queries, call upstream services, and assemble response outputs for local development and demos.
+
+The backend orchestrates retrieval and generation paths, while the frontend provides the interaction surface. In local mode, the repo can also start `ant-resolver` so the full query-to-resolution flow is available in one command.
+
+The implementation is intended as a reference baseline for multi-service orchestration behavior aligned to ANS Core v2.0.
+
+## Where it fits
+
+Canonical flow:
+
+1. Capsulizer
+2. Registrar
+3. Resolver
+4. Orchestrator (this repository)
+
+## Quickstart
 
 ```bash
 npm install
-npm run demo     # kills stale processes, starts everything, opens browser
+npm run dev
 ```
 
-## Scripts
+Also available:
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start backend, frontend, and ant-resolver concurrently (color-coded) |
-| `npm run demo` | Kill ports, start all, auto-open browser when UI is ready |
-| `npm run kill` | Free ports 5055, 5174, 5175 |
+- `npm run demo`
+- `npm run kill`
+- `npm run reset:dev`
 
-## Services
+## Configuration
 
-| Service | URL | Port |
-|---------|-----|------|
-| Frontend (Vite) | http://localhost:5174 | 5174 |
-| Backend (Express) | http://localhost:5055 | 5055 |
-| ant-resolver | http://localhost:5175 | 5175 |
+Environment variables are managed in `backend/.env`. Start from `backend/.env.example`:
 
-## Resolver integration
-
-Set `RESOLVER_MODE=http` in `backend/.env` to use a running ant-resolver instance:
-
-```env
-RESOLVER_MODE=http
-RESOLVER_BASE_URL=http://localhost:5175
-RESOLVER_NODE_ENDPOINT=/v1/resolve/node
-RESOLVER_ENDPOINT=/v1/resolve/capsules
-RESOLVER_OWNER_SLUG=agentnet
+```bash
+cp backend/.env.example backend/.env
 ```
 
-The orchestrator performs a two-step resolve: first resolves the node by identifier, then fetches capsules for that node.
+## Repo structure
 
-## Project layout
+- `backend/` Express orchestration API
+- `frontend/` Vite + React client
+- `scripts/` local development utilities
 
-```
-ant-orchestrator/
-  backend/          Express API (port 5055)
-  frontend/         Vite + React + Tailwind (port 5174)
-  scripts/          Dev tooling (killPorts, openWhenReady)
-../ant-resolver/    External resolver service (port 5175)
-```
+## Status
+
+Alpha, reference implementation.
+
+## Related Repositories
+
+- https://github.com/agentnet-ai/AgentNet
+- https://github.com/agentnet-ai/ant-capsulizer
+- https://github.com/agentnet-ai/ant-registrar
+- https://github.com/agentnet-ai/ant-resolver
+- https://github.com/agentnet-ai/ant-orchestrator
+
+## License
+
+Apache License 2.0. See `LICENSE`.

@@ -6,8 +6,14 @@ const { generateResponse } = require("../clients/llmClient");
 const { THRESHOLDS, evaluateThresholds } = require("./thresholds");
 const { buildPrompt } = require("./promptBlocks");
 const { persistChatRun } = require("../persist/persistChatRun");
+const {
+  renderAgentNetDeterministic,
+  renderWebRagOnly,
+  renderModelSynthesis,
+  renderAllCombined: renderCombinedAll,
+} = require("./renderers");
 
-const DEFAULT_OPTIONS = { enableWebRag: false, enableLlm: false };
+const DEFAULT_OPTIONS = { enableWebRag: false, enableLlm: false, answerMode: "agentnet" };
 
 async function runOrchestration(query, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
@@ -19,62 +25,15 @@ async function runOrchestration(query, options = {}) {
   const resolverResult = await queryResolver(query, { conversationId: opts.conversationId });
   const resolverMs = resolverTimer();
 
-  // --- No-results early exit ---
-  const noResults =
-    resolverResult.coverage === 0 &&
-    resolverResult.snippets.length === 0 &&
-    ((resolverResult.notes || "").includes("node not found") ||
-     (resolverResult.notes || "").includes("no query results"));
-
-  if (noResults) {
-    const ownerSlug = process.env.RESOLVER_OWNER_SLUG || "agentnet";
-    const routedVia = resolverResult.routedVia || "identifier";
-    const reasonText = routedVia === "query"
-      ? `No matching capsules found for "${query}" under owner "${ownerSlug}".`
-      : `No node found for identifier "${query}" under owner "${ownerSlug}". Use a known AgentNet identifier.`;
-    const result = {
-      response: reasonText,
-      trace: {
-        traceVersion: "0.1",
-        requestId: id,
-        routing: {
-          resolverUsed: true,
-          webRagUsed: false,
-          routedVia,
-          reason: "Resolver returned no results",
-          steps: [
-            { name: "resolver", executed: true, reason: `Ground-First (${routedVia})` },
-            { name: "webRag", executed: false, reason: "Resolver returned no results" },
-            { name: "llm", executed: false, reason: "Resolver returned no results" },
-          ],
-        },
-        resolver: {
-          coverage: resolverResult.coverage,
-          confidence: resolverResult.confidence,
-          snippetCount: 0,
-          mode: resolverResult.mode || "mock",
-          routedVia,
-        },
-        thresholds: {
-          ...THRESHOLDS.resolver,
-          passed: false,
-          webRagTriggered: false,
-          notes: resolverResult.notes || "resolver: no results",
-        },
-        promptBlocks: [],
-        provenance: { sources: [] },
-        timing: { totalMs: total(), resolverMs, webRagMs: 0, llmMs: 0 },
-      },
-    };
-
-    await persistChatRun({ query, result, conversationId: opts.conversationId, identitySnapshot: resolverResult.identitySnapshot });
-    return result;
-  }
-
   // --- Threshold evaluation ---
   const threshold = evaluateThresholds(resolverResult);
 
-  // --- Routing decisions ---
+  // --- Strict execution semantics by answer mode ---
+  const answerMode = normalizeAnswerMode(opts.answerMode);
+  const forceWeb = answerMode === "rag" || answerMode === "model" || answerMode === "all";
+  const forceLlm = answerMode === "model" || answerMode === "all";
+
+  // --- Routing decisions / execution ---
   const steps = [];
   let webResult = null;
   let webMs = 0;
@@ -83,39 +42,63 @@ async function runOrchestration(query, options = {}) {
 
   steps.push({ name: "resolver", executed: true, reason: "Ground-First: always executes" });
 
-  if (threshold.passed) {
-    steps.push({ name: "webRag", executed: false, reason: "Resolver met thresholds" });
-    steps.push({ name: "llm", executed: false, reason: "Resolver met thresholds" });
+  if (forceWeb) {
+    const webTimer = startTimer();
+    webResult = await queryWeb(query);
+    webMs = webTimer();
+    steps.push({ name: "webRag", executed: true, reason: `Forced by answerMode=${answerMode}` });
   } else {
-    if (opts.enableWebRag) {
-      const webTimer = startTimer();
-      webResult = await queryWeb(query);
-      webMs = webTimer();
-      steps.push({ name: "webRag", executed: true, reason: "Resolver below thresholds" });
-    } else {
-      steps.push({ name: "webRag", executed: false, reason: "Disabled by options" });
-    }
+    steps.push({ name: "webRag", executed: false, reason: `Skipped by answerMode=${answerMode}` });
+  }
 
-    if (opts.enableLlm) {
-      const { prompt } = buildPrompt({ query, resolverResult, webResult });
-      const llmTimer = startTimer();
-      llmResult = await generateResponse(prompt);
-      llmMs = llmTimer();
-      steps.push({ name: "llm", executed: true, reason: "Resolver below thresholds" });
-    } else {
-      steps.push({ name: "llm", executed: false, reason: "Disabled by options" });
-    }
+  if (forceLlm) {
+    const resolverSnippets = buildResolverSnippets(resolverResult);
+    const webSources = buildWebSources(webResult);
+    const groundingBlocks = buildGroundingBlocks(resolverSnippets, webSources);
+    const llmTimer = startTimer();
+    llmResult = await generateResponse({
+      query,
+      groundingBlocks,
+      grounded: groundingBlocks.length > 0,
+    });
+    llmMs = llmTimer();
+    steps.push({ name: "llm", executed: true, reason: `Forced by answerMode=${answerMode}` });
+  } else {
+    steps.push({ name: "llm", executed: false, reason: `Skipped by answerMode=${answerMode}` });
   }
 
   // --- Build prompt blocks list (for trace) ---
   const { blocks } = buildPrompt({ query, resolverResult, webResult });
 
   // --- Assemble response ---
+  const resolverSnippets = buildResolverSnippets(resolverResult);
+  const webSources = buildWebSources(webResult);
+  const sourcesUsedSummary = [
+    ...resolverSnippets.map((s) => s.citation).filter(Boolean),
+    ...webSources.map((s) => s.url),
+  ];
+  const grounded = sourcesUsedSummary.length > 0;
+
   let response;
-  if (llmResult) {
-    response = llmResult.text;
+  if (answerMode === "agentnet") {
+    response = renderAgentNetDeterministic({ query, resolverSnippets });
+  } else if (answerMode === "rag") {
+    response = renderWebRagOnly({ query, webSources });
+  } else if (answerMode === "model") {
+    response = renderModelSynthesis({
+      llmAnswer: llmResult?.text || "LLM returned no text.",
+      sourcesUsedSummary,
+      grounded,
+    });
   } else {
-    response = resolverResult.snippets.map((s) => s.text).join("\n");
+    response = renderCombinedAll({
+      query,
+      resolverSnippets,
+      webSources,
+      llmAnswer: llmResult?.text || "LLM returned no text.",
+      sourcesUsedSummary,
+      grounded,
+    });
   }
 
   // --- Assemble provenance ---
@@ -139,9 +122,9 @@ async function runOrchestration(query, options = {}) {
       requestId: id,
       routing: {
         resolverUsed: true,
-        webRagUsed: webResult !== null,
+        webRagUsed: forceWeb,
         routedVia,
-        reason: threshold.notes,
+        reason: `Strict mode: ${answerMode}`,
         steps,
       },
       resolver: {
@@ -154,7 +137,7 @@ async function runOrchestration(query, options = {}) {
       thresholds: {
         ...THRESHOLDS.resolver,
         passed: threshold.passed,
-        webRagTriggered: webResult !== null,
+        webRagTriggered: forceWeb,
         notes: resolverResult.notes
           ? threshold.notes + "; " + resolverResult.notes
           : threshold.notes,
@@ -169,6 +152,7 @@ async function runOrchestration(query, options = {}) {
       },
     },
   };
+  result.trace.answer = { mode: answerMode, grounded };
 
   await persistChatRun({ query, result, conversationId: opts.conversationId, identitySnapshot: resolverResult.identitySnapshot });
 
@@ -176,3 +160,37 @@ async function runOrchestration(query, options = {}) {
 }
 
 module.exports = { runOrchestration };
+
+function normalizeAnswerMode(mode) {
+  return ["agentnet", "rag", "model", "all"].includes(mode) ? mode : "agentnet";
+}
+
+function buildResolverSnippets(resolverResult) {
+  const capsules = Array.isArray(resolverResult.capsules) ? resolverResult.capsules : [];
+  return resolverResult.snippets.map((s, i) => {
+    const cap = capsules[i] || {};
+    const citation =
+      cap.capsule_uri ||
+      cap.capsuleUri ||
+      cap.url ||
+      (cap.id ? `capsule:${cap.id}` : null);
+    return {
+      text: s.text,
+      citation,
+    };
+  });
+}
+
+function buildWebSources(webResult) {
+  return (webResult?.results || []).map((r) => ({
+    url: r.url,
+    title: r.title || "",
+    snippet: r.snippet || "",
+  }));
+}
+
+function buildGroundingBlocks(resolverSnippets, webSources) {
+  const resolverBlock = resolverSnippets.map((s) => `- ${s.text} [${s.citation || "capsule:unknown"}]`);
+  const webBlock = webSources.map((s) => `- ${s.snippet || s.title} [${s.url}]`);
+  return [...resolverBlock, ...webBlock].join("\n");
+}

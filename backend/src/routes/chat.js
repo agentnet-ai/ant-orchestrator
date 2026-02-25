@@ -14,6 +14,7 @@ const chatSchema = z.object({
     enableWebRag: z.boolean().optional(),
     enableLlm: z.boolean().optional(),
   }).optional(),
+  answerMode: z.enum(["agentnet", "rag", "model", "all"]).optional(),
 });
 
 router.post("/", async (req, res) => {
@@ -22,12 +23,13 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues });
   }
 
-  const { conversationId, message, options } = parsed.data;
+  const { conversationId, message, options, answerMode } = parsed.data;
 
   try {
     const result = await runOrchestration(message.content, {
       ...options,
       conversationId,
+      answerMode,
     });
     res.json(result);
   } catch (err) {

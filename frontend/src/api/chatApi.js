@@ -1,6 +1,6 @@
 const API_BASE = "http://localhost:5055";
 
-export async function sendMessage({ conversationId, text, options }) {
+export async function sendMessage({ conversationId, text, options, answerMode }) {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -8,6 +8,7 @@ export async function sendMessage({ conversationId, text, options }) {
       conversationId,
       message: { role: "user", content: text },
       options,
+      answerMode,
     }),
   });
 
