@@ -5,7 +5,22 @@ const RESOLVER_ENDPOINT = process.env.RESOLVER_ENDPOINT || "/v1/resolve/capsules
 const RESOLVER_QUERY_ENDPOINT = process.env.RESOLVER_QUERY_ENDPOINT || "/v1/resolve/query";
 const RESOLVER_TIMEOUT_MS = Number(process.env.RESOLVER_TIMEOUT_MS) || 5000;
 const RESOLVER_API_KEY = process.env.RESOLVER_API_KEY || "";
-const RESOLVER_OWNER_SLUG = process.env.RESOLVER_OWNER_SLUG || "";
+const RESOLVER_OWNER_ID_RAW = process.env.RESOLVER_OWNER_ID;
+const HAS_RESOLVER_OWNER_ID =
+  RESOLVER_OWNER_ID_RAW != null && String(RESOLVER_OWNER_ID_RAW).trim() !== "";
+
+if (!HAS_RESOLVER_OWNER_ID) {
+  throw new Error(
+    `[resolverClient] RESOLVER_OWNER_ID is required. Discover it via: curl -s http://localhost:4002/v1/owners/ant-worker`
+  );
+}
+
+const RESOLVER_OWNER_ID = Number(String(RESOLVER_OWNER_ID_RAW).trim());
+if (!Number.isInteger(RESOLVER_OWNER_ID) || RESOLVER_OWNER_ID <= 0) {
+  throw new Error(
+    `[resolverClient] RESOLVER_OWNER_ID must be a positive integer, got "${RESOLVER_OWNER_ID_RAW}".`
+  );
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const URI_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -27,21 +42,20 @@ async function queryResolver(query, context = {}) {
 
 // ── HTTP mode ───────────────────────────────────────────────
 
-async function queryResolverHttp(query, context) {
-  const ownerSlug = RESOLVER_OWNER_SLUG || context.conversationId || "";
-
+async function queryResolverHttp(query, _context) {
   if (isStructuredIdentifier(query)) {
-    return resolveByIdentifier(query, ownerSlug);
+    return resolveByIdentifier(query);
   }
-  return resolveByQuery(query, ownerSlug);
+  return resolveByQuery(query);
 }
 
 // ── Structured path: node resolve → capsule fetch ───────────
 
-async function resolveByIdentifier(query, ownerSlug) {
+async function resolveByIdentifier(query) {
+  const ownerRef = buildResolverOwnerRefPayload();
   const nodeResult = await postResolver(
     `${RESOLVER_BASE_URL}${RESOLVER_NODE_ENDPOINT}`,
-    { owner_slug: ownerSlug, identifier: query },
+    { ...ownerRef, identifier: query },
   );
 
   if (nodeResult.error) {
@@ -101,10 +115,11 @@ async function resolveByIdentifier(query, ownerSlug) {
 
 // ── Natural language path: resolve/query ────────────────────
 
-async function resolveByQuery(query, ownerSlug) {
+async function resolveByQuery(query) {
+  const ownerRef = buildResolverOwnerRefPayload();
   const qResult = await postResolver(
     `${RESOLVER_BASE_URL}${RESOLVER_QUERY_ENDPOINT}`,
-    { owner_slug: ownerSlug, q: query, limit: 20 },
+    { ...ownerRef, q: query, limit: 20 },
   );
 
   if (qResult.error) {
@@ -310,6 +325,21 @@ function sleep(ms) {
 
 function round(n) {
   return Math.round(n * 1000) / 1000;
+}
+
+function buildResolverOwnerRefPayload() {
+  const payload = { owner_id: RESOLVER_OWNER_ID };
+  assertResolverOwnerPayload(payload);
+  return payload;
+}
+
+function assertResolverOwnerPayload(payload) {
+  const hasOwnerSlug = Object.prototype.hasOwnProperty.call(payload, "owner_slug");
+  const hasOwnerId = Object.prototype.hasOwnProperty.call(payload, "owner_id");
+
+  if (!hasOwnerId || hasOwnerSlug) {
+    throw new Error("Resolver request payload must include owner_id only");
+  }
 }
 
 module.exports = { queryResolver };
