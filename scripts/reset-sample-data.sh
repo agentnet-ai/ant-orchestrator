@@ -79,20 +79,28 @@ if [[ "$FLUSH_QUEUES" -eq 1 ]]; then
   BULL_PREFIX="${BULL_PREFIX:-bull}"
 
   if command -v redis-cli >/dev/null 2>&1; then
-    REDIS_AUTH_ARGS=()
-    if [[ -n "$REDIS_PASSWORD" ]]; then
-      REDIS_AUTH_ARGS=(-a "$REDIS_PASSWORD")
+    if [[ -n "${REDIS_PASSWORD:-}" ]]; then
+      export REDISCLI_AUTH="${REDIS_PASSWORD:-}"
+    else
+      unset REDISCLI_AUTH || true
     fi
 
     delete_pattern() {
       local pattern="$1"
-      mapfile -t keys < <(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" "${REDIS_AUTH_ARGS[@]}" --scan --pattern "$pattern")
-      if [[ "${#keys[@]}" -eq 0 ]]; then
+      local count=0
+      local key=""
+
+      while IFS= read -r key; do
+        [[ -z "${key:-}" ]] && continue
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" DEL "$key" >/dev/null
+        count=$((count + 1))
+      done < <(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" --scan --pattern "$pattern")
+
+      if [[ "$count" -eq 0 ]]; then
         echo "  - no keys for pattern: $pattern"
         return
       fi
-      redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" "${REDIS_AUTH_ARGS[@]}" DEL "${keys[@]}" >/dev/null
-      echo "  - deleted ${#keys[@]} keys for pattern: $pattern"
+      echo "  - deleted $count keys for pattern: $pattern"
     }
 
     delete_pattern "${BULL_PREFIX}:${CAPSULE_QUEUE_NAME}:*"
