@@ -53,12 +53,16 @@ echo "[2/5] Reset registrar dev data..."
 (cd "$REGISTRAR_DIR" && npm run reset:dev)
 
 echo
-echo "[3/5] Reset resolver dev data..."
+echo "[3/5] Applying resolver migrations..."
+(cd "$RESOLVER_DIR" && npm run db:migrate)
+
+echo
+echo "[4/5] Reset resolver dev data..."
 (cd "$RESOLVER_DIR" && npm run reset:dev)
 
 if [[ "$FLUSH_QUEUES" -eq 1 ]]; then
   echo
-  echo "[4/5] Flushing BullMQ keys for capsulizer queues..."
+  echo "[5/5] Flushing BullMQ keys for capsulizer queues..."
   CAPSULIZER_ENV="$CAPSULIZER_DIR/.env"
   if [[ -f "$CAPSULIZER_ENV" ]]; then
     set -a
@@ -98,18 +102,18 @@ if [[ "$FLUSH_QUEUES" -eq 1 ]]; then
   fi
 else
   echo
-  echo "[4/5] Queue flush skipped (--no-queue-flush)."
+  echo "[5/5] Queue flush skipped (--no-queue-flush)."
 fi
 
 if [[ "$CLEAR_CAPSULIZER_FILES" -eq 1 ]]; then
   echo
-  echo "[5/5] Clearing capsulizer run artifacts..."
+  echo "[6/6] Clearing capsulizer run artifacts..."
   rm -rf "$CAPSULIZER_DIR/runs" "$CAPSULIZER_DIR/snapshots"
   rm -f "$CAPSULIZER_DIR/crawler.log"
   mkdir -p "$CAPSULIZER_DIR/runs" "$CAPSULIZER_DIR/snapshots"
 else
   echo
-  echo "[5/5] Capsulizer file cleanup skipped (--no-capsulizer-files)."
+  echo "[6/6] Capsulizer file cleanup skipped (--no-capsulizer-files)."
 fi
 
 echo
