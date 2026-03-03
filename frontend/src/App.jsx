@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { sendMessage, replayConversation } from "./api/chatApi";
+import { useState, useCallback, useEffect } from "react";
+import { sendMessage } from "./api/chatApi";
 import ChatArea from "./components/Chat/ChatArea";
 import ChatInput from "./components/Chat/ChatInput";
 import TracePanel from "./components/Trace/TracePanel";
@@ -8,15 +8,6 @@ const LS_CID = "ant_orch_conversationId";
 const LS_WEB = "ant_orch_enableWebRag";
 const LS_LLM = "ant_orch_enableLlm";
 const LS_ANSWER_MODE = "ant_orch_answerMode";
-
-function getOrCreateCid() {
-  let cid = localStorage.getItem(LS_CID);
-  if (!cid) {
-    cid = crypto.randomUUID();
-    localStorage.setItem(LS_CID, cid);
-  }
-  return cid;
-}
 
 function loadBool(key) {
   return localStorage.getItem(key) === "true";
@@ -31,11 +22,11 @@ function loadAnswerMode() {
 }
 
 export default function App() {
-  const [conversationId] = useState(getOrCreateCid);
+  const [conversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState([]);
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [replaying, setReplaying] = useState(false);
+  const [replaying] = useState(false);
   const [banner, setBanner] = useState(null);
   const [latestInquiry, setLatestInquiry] = useState(null);
   const [latestInquiryStatus, setLatestInquiryStatus] = useState("idle");
@@ -44,49 +35,30 @@ export default function App() {
   const [enableLlm, setEnableLlm] = useState(() => loadBool(LS_LLM));
   const [answerMode, setAnswerMode] = useState(loadAnswerMode);
 
-  const replayDone = useRef(false);
-
   // Persist toggle state
   useEffect(() => { localStorage.setItem(LS_WEB, enableWebRag); }, [enableWebRag]);
   useEffect(() => { localStorage.setItem(LS_LLM, enableLlm); }, [enableLlm]);
   useEffect(() => { localStorage.setItem(LS_ANSWER_MODE, answerMode); }, [answerMode]);
 
-  // Replay on mount
+  // Stateless demo mode: clear stale UI/persistence on fresh load.
   useEffect(() => {
-    if (replayDone.current) return;
-    replayDone.current = true;
-
-    (async () => {
-      setReplaying(true);
-      try {
-        const result = await replayConversation(conversationId);
-
-        if (result.status === "db_unavailable") {
-          setBanner("Audit DB unavailable");
-        }
-
-        if (result.status === "ok" && result.messages.length > 0) {
-          const mapped = result.messages.map((m, i) => ({
-            id: m.messageId || `replay-${i}`,
-            role: m.role,
-            content: m.content,
-            trace: m.trace || null,
-          }));
-          setMessages(mapped);
-
-          const lastAssistant = mapped.reduce(
-            (acc, m, i) => (m.role === "assistant" ? i : acc),
-            null
-          );
-          if (lastAssistant !== null) setSelectedIdx(lastAssistant);
-        }
-      } catch {
-        // Network error — treat as fresh
-      } finally {
-        setReplaying(false);
-      }
-    })();
-  }, [conversationId]);
+    const keysToClear = [
+      LS_CID,
+      "agentnet:conversations",
+      "agentnet:lastTrace",
+      "ant_orch_lastTrace",
+      "ant_orch_messages",
+    ];
+    for (const key of keysToClear) {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+    setMessages([]);
+    setSelectedIdx(null);
+    setLatestInquiry(null);
+    setLatestInquiryStatus("idle");
+    setBanner(null);
+  }, []);
 
   const handleSend = useCallback(
     async (text) => {
@@ -186,10 +158,6 @@ export default function App() {
       setLatestInquiryStatus("error");
     }
   }, []);
-
-  useEffect(() => {
-    refreshLatestInquiry();
-  }, [refreshLatestInquiry]);
 
   const selectedTrace =
     selectedIdx !== null && messages[selectedIdx]?.trace
