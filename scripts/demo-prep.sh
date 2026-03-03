@@ -36,8 +36,6 @@ if [[ ! "$ANT_WORKER_OWNER_ID" =~ ^[0-9]+$ ]] || [[ "$ANT_WORKER_OWNER_ID" -le 0
 fi
 
 DEMO_REPO_PATH="${DEMO_REPO_PATH:-../agentnet}"
-DEMO_REPO_GLOB="${DEMO_REPO_GLOB:-**/*.md}"
-DEMO_REPO_LIMIT="${DEMO_REPO_LIMIT:-200}"
 DEMO_SITE_URL="${DEMO_SITE_URL:-https://agent-net.ai}"
 
 echo "[demo-prep] [1/2] Capsulizing repo content into resolver DB..."
@@ -45,9 +43,7 @@ echo "[demo-prep] [1/2] Capsulizing repo content into resolver DB..."
   cd "$CAPSULIZER_DIR"
   ANT_WORKER_OWNER_ID="$ANT_WORKER_OWNER_ID" ANT_WORKER_OWNER_SLUG="$ANT_WORKER_OWNER_SLUG" \
     npm run capsulize:repo -- \
-      --repoPath "$DEMO_REPO_PATH" \
-      --include "$DEMO_REPO_GLOB" \
-      --limit "$DEMO_REPO_LIMIT"
+      --repoPath "$DEMO_REPO_PATH"
 )
 
 echo "[demo-prep] [2/2] Enqueuing single-page crawl..."
