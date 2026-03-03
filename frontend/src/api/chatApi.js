@@ -14,7 +14,13 @@ export async function sendMessage({ conversationId, text, options, answerMode })
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
+    const err = new Error(
+      body.error?.message ||
+      body.error ||
+      `Request failed (${res.status})`
+    );
+    err.code = body.error?.code || body.code || null;
+    throw err;
   }
 
   return res.json();

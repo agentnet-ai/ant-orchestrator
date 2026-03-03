@@ -1,5 +1,7 @@
 require("dotenv").config();
 
+require("./workers/inquiryWorker");
+
 const { createServer } = require("./server");
 const { testDbConnection } = require("./db/connection");
 const { initModels } = require("./models");

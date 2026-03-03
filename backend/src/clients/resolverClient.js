@@ -5,22 +5,7 @@ const RESOLVER_ENDPOINT = process.env.RESOLVER_ENDPOINT || "/v1/resolve/capsules
 const RESOLVER_QUERY_ENDPOINT = process.env.RESOLVER_QUERY_ENDPOINT || "/v1/resolve/query";
 const RESOLVER_TIMEOUT_MS = Number(process.env.RESOLVER_TIMEOUT_MS) || 5000;
 const RESOLVER_API_KEY = process.env.RESOLVER_API_KEY || "";
-const RESOLVER_OWNER_ID_RAW = process.env.RESOLVER_OWNER_ID;
-const HAS_RESOLVER_OWNER_ID =
-  RESOLVER_OWNER_ID_RAW != null && String(RESOLVER_OWNER_ID_RAW).trim() !== "";
-
-if (!HAS_RESOLVER_OWNER_ID) {
-  throw new Error(
-    `[resolverClient] RESOLVER_OWNER_ID is required. Discover it via: curl -s http://localhost:4002/v1/owners/ant-worker`
-  );
-}
-
-const RESOLVER_OWNER_ID = Number(String(RESOLVER_OWNER_ID_RAW).trim());
-if (!Number.isInteger(RESOLVER_OWNER_ID) || RESOLVER_OWNER_ID <= 0) {
-  throw new Error(
-    `[resolverClient] RESOLVER_OWNER_ID must be a positive integer, got "${RESOLVER_OWNER_ID_RAW}".`
-  );
-}
+const RESOLVER_OWNER_ID = Number(String(process.env.RESOLVER_OWNER_ID || "1").trim());
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const URI_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -116,10 +101,10 @@ async function resolveByIdentifier(query) {
 // ── Natural language path: resolve/query ────────────────────
 
 async function resolveByQuery(query) {
-  const ownerRef = buildResolverOwnerRefPayload();
+  const q = preprocessResolverQuery(query);
   const qResult = await postResolver(
     `${RESOLVER_BASE_URL}${RESOLVER_QUERY_ENDPOINT}`,
-    { ...ownerRef, q: query, limit: 20 },
+    { owner_id: 1, q, query: q, limit: 10 },
   );
 
   if (qResult.error) {
@@ -134,6 +119,30 @@ async function resolveByQuery(query) {
   }
 
   return normalizeQueryResponse(raw);
+}
+
+function preprocessResolverQuery(userText) {
+  const original = String(userText || "");
+  const cleaned = original
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(
+      /^(what is|what's|define|explain|tell me about|where is|where are)\s+/,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned.length >= 2) return cleaned;
+
+  const fallback = original
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 3)
+    .sort((a, b) => b.length - a.length)[0];
+
+  return fallback || original.trim().toLowerCase();
 }
 
 function normalizeQueryResponse(raw) {
@@ -328,7 +337,11 @@ function round(n) {
 }
 
 function buildResolverOwnerRefPayload() {
-  const payload = { owner_id: RESOLVER_OWNER_ID };
+  const ownerId =
+    Number.isInteger(RESOLVER_OWNER_ID) && RESOLVER_OWNER_ID > 0
+      ? RESOLVER_OWNER_ID
+      : 1;
+  const payload = { owner_id: ownerId };
   assertResolverOwnerPayload(payload);
   return payload;
 }

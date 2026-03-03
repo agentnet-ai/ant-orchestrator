@@ -37,6 +37,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [banner, setBanner] = useState(null);
+  const [latestInquiry, setLatestInquiry] = useState(null);
+  const [latestInquiryStatus, setLatestInquiryStatus] = useState("idle");
 
   const [enableWebRag, setEnableWebRag] = useState(() => loadBool(LS_WEB));
   const [enableLlm, setEnableLlm] = useState(() => loadBool(LS_LLM));
@@ -131,6 +133,11 @@ export default function App() {
           return prev;
         });
       } catch (err) {
+        if (err?.code === "OWNER_ID_REQUIRED") {
+          setBanner("Resolver owner is required. Demo mode expects owner_id=1.");
+        } else if (err?.code === "QUERY_TOO_SHORT") {
+          setBanner("Query too short for resolver. Please enter a longer query.");
+        }
         setMessages((prev) => {
           const next = prev.filter((m) => m.id !== "thinking");
           next.push({
@@ -153,6 +160,37 @@ export default function App() {
     setSelectedIdx(null);
   }, []);
 
+  const refreshLatestInquiry = useCallback(async () => {
+    try {
+      setLatestInquiryStatus("loading");
+
+      const res = await fetch("http://localhost:5055/api/demo/latest-inquiry");
+
+      if (res.status === 204) {
+        setLatestInquiry(null);
+        setLatestInquiryStatus("empty");
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log("[latest-inquiry] fetched", data);
+
+      setLatestInquiry(data);
+      setLatestInquiryStatus("idle");
+    } catch (err) {
+      console.error("[latest-inquiry] error", err);
+      setLatestInquiryStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshLatestInquiry();
+  }, [refreshLatestInquiry]);
+
   const selectedTrace =
     selectedIdx !== null && messages[selectedIdx]?.trace
       ? messages[selectedIdx].trace
@@ -167,6 +205,33 @@ export default function App() {
             {banner}
           </div>
         )}
+        <div className="border-b border-neutral-700 px-3 py-2 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-neutral-300">Latest grounded result</span>
+            <button
+              type="button"
+              onClick={refreshLatestInquiry}
+              disabled={latestInquiryStatus === "loading"}
+              className="rounded border border-neutral-600 px-2 py-1 text-neutral-200 disabled:opacity-60"
+            >
+              {latestInquiryStatus === "loading" ? "Refreshing..." : "Refresh grounded result"}
+            </button>
+          </div>
+          {latestInquiry ? (
+            <div className="mt-2 space-y-1 text-neutral-300">
+              <div>updatedAt: {latestInquiry.updatedAt || "-"}</div>
+              <div>nodeOrigin: {latestInquiry.nodeOrigin || "-"}</div>
+              <div>capsuleCount: {latestInquiry.capsuleCount ?? "-"}</div>
+              <div>runId: {latestInquiry.runId || "-"}</div>
+            </div>
+          ) : latestInquiryStatus === "loading" ? (
+            <div className="mt-2 text-neutral-400">Loading...</div>
+          ) : latestInquiryStatus === "error" ? (
+            <div className="mt-2 text-rose-300">Error loading inquiry.</div>
+          ) : (
+            <div className="mt-2 text-neutral-400">No inquiry captured yet.</div>
+          )}
+        </div>
         <ChatArea
           messages={messages}
           selectedIdx={selectedIdx}

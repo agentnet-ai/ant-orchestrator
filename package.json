@@ -5,6 +5,7 @@
   "workspaces": ["backend", "frontend"],
   "scripts": {
     "dev": "concurrently -k -n ORCH-BE,ORCH-FE,RESOLVER,REGISTRAR -c blue,green,magenta,yellow \"npm run dev -w backend\" \"npm run dev -w frontend\" \"cd ../ant-resolver && npm run dev\" \"cd ../ant-registrar && npm run dev\"",
+    "dev:demo": "concurrently --kill-others-on-fail -n ORCH-BE,ORCH-FE,RESOLVER,REGISTRAR,CAPS-WORKER,DEMO-PREP -c blue,green,magenta,yellow,cyan,white \"npm run dev -w backend\" \"npm run dev -w frontend\" \"cd ../ant-resolver && npm run dev\" \"cd ../ant-registrar && npm run dev\" \"cd ../ant-capsulizer && npm run worker\" \"bash scripts/demo-prep.sh\"",
     "reset:dev": "node scripts/reset-dev.js",
     "reset:sample-data": "bash scripts/reset-sample-data.sh",
     "kill": "node scripts/killPorts.js",

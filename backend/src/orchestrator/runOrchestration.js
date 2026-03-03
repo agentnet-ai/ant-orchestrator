@@ -25,8 +25,11 @@ async function runOrchestration(query, options = {}) {
   const resolverResult = await queryResolver(query, { conversationId: opts.conversationId });
   const resolverMs = resolverTimer();
 
-  // --- Threshold evaluation ---
-  const threshold = evaluateThresholds(resolverResult);
+  // --- Threshold evaluation (definitional queries are slightly lenient on confidence) ---
+  const threshold = evaluateThresholds(
+    resolverResult,
+    isDefinitionalQuery(query) ? { confidenceMin: 0.45 } : undefined,
+  );
 
   // --- Strict execution semantics by answer mode ---
   const answerMode = normalizeAnswerMode(opts.answerMode);
@@ -193,4 +196,10 @@ function buildGroundingBlocks(resolverSnippets, webSources) {
   const resolverBlock = resolverSnippets.map((s) => `- ${s.text} [${s.citation || "capsule:unknown"}]`);
   const webBlock = webSources.map((s) => `- ${s.snippet || s.title} [${s.url}]`);
   return [...resolverBlock, ...webBlock].join("\n");
+}
+
+function isDefinitionalQuery(q) {
+  return /^(what is|what's|define|explain|tell me about|where is|where are)\b/i.test(
+    String(q || "").trim(),
+  );
 }

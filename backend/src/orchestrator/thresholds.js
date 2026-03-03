@@ -8,9 +8,10 @@ const THRESHOLDS = {
 /**
  * Evaluate resolver results against thresholds.
  */
-function evaluateThresholds(resolverResult) {
+function evaluateThresholds(resolverResult, overrides = {}) {
   const { coverage, confidence } = resolverResult;
-  const { coverageMin, confidenceMin } = THRESHOLDS.resolver;
+  const coverageMin = overrides.coverageMin ?? THRESHOLDS.resolver.coverageMin;
+  const confidenceMin = overrides.confidenceMin ?? THRESHOLDS.resolver.confidenceMin;
   const passed = coverage >= coverageMin && confidence >= confidenceMin;
 
   return {
